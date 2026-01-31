@@ -44,6 +44,66 @@ class _DetallePruebaPageState extends State<DetallePruebaPage> {
     prov.loadEstudiantes();
   }
 
+  Future<void> _importAiken() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['txt', 'aiken'],
+      );
+
+      if (result != null) {
+        File file = File(result.files.single.path!);
+        String content = await file.readAsString();
+        
+        List<Pregunta> preguntas = AikenParser.parse(content, widget.prueba.id!);
+        
+        final provider = Provider.of<AppProvider>(context, listen: false);
+        for (var pregunta in preguntas) {
+          await provider.addPregunta(pregunta);
+        }
+        
+        if (mounted) {
+          showSnackBar(
+            context,
+            "Se importaron ${preguntas.length} preguntas correctamente.",
+          );
+          provider.loadPreguntas(widget.prueba.id!);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        showSnackBar(context, "Error al importar: $e", isError: true);
+      }
+    }
+  }
+
+  Future<void> _generatePdf() async {
+    try {
+      final provider = Provider.of<AppProvider>(context, listen: false);
+      
+      if (provider.preguntas.isEmpty) {
+        showSnackBar(context, "No hay preguntas para generar PDF.", isError: true);
+        return;
+      }
+
+      final pdfPath = await PdfService.generateExamPdf(
+        widget.prueba,
+        widget.materia,
+        provider.preguntas,
+      );
+
+      await OpenFile.open(pdfPath);
+      
+      if (mounted) {
+        showSnackBar(context, "PDF generado correctamente.");
+      }
+    } catch (e) {
+      if (mounted) {
+        showSnackBar(context, "Error al generar PDF: $e", isError: true);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -324,7 +384,7 @@ class _DetallePruebaPageState extends State<DetallePruebaPage> {
                           ),
                         ),
                         onPressed: () async {
-                          // Implementar importación
+                          await _importAiken();
                         },
                       ),
                     ),
@@ -352,8 +412,8 @@ class _DetallePruebaPageState extends State<DetallePruebaPage> {
                             color: kPrimaryColor,
                           ),
                         ),
-                        onPressed: () {
-                          // Implementar PDF
+                        onPressed: () async {
+                          await _generatePdf();
                         },
                       ),
                     ),
@@ -526,45 +586,6 @@ class _DetallePruebaPageState extends State<DetallePruebaPage> {
                         context,
                         MaterialPageRoute(
                           builder: (_) => ScannerPage(prueba: widget.prueba),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: kPrimaryGradient,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                    ),
-                    icon: const Icon(Icons.picture_as_pdf, color: kPrimaryColor),
-                    label: const Text(
-                      "PDFs Lote",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: kPrimaryColor,
-                      ),
-                    ),
-                    onPressed: () {
-                      final provider =
-                          Provider.of<AppProvider>(context, listen: false);
-                      if (provider.preguntas.isEmpty) {
-                        showSnackBar(context, "Primero añade preguntas.",
-                            isError: true);
-                        return;
-                      }
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              BatchPdfScannerPage(prueba: widget.prueba),
                         ),
                       );
                     },

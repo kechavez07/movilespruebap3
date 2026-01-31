@@ -122,5 +122,5 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon/app_icon.png"  # Tu imagen de 1024x1024
-  min_sdk_android: 21asi es
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21

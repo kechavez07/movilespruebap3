@@ -18,7 +18,7 @@ class ScannerPage extends StatefulWidget {
 }
 
 class _ScannerPageState extends State<ScannerPage> {
-  File? _image;
+  List<File> _images = [];
   bool _isAnalyzing = false;
   String? _analysisError;
   Map<String, dynamic>? _analysisResult;
@@ -39,7 +39,7 @@ class _ScannerPageState extends State<ScannerPage> {
     if (picked != null) {
       print("📷 [ScannerPage] ✅ Imagen seleccionada: ${picked.path}");
       setState(() {
-        _image = File(picked.path);
+        _images.add(File(picked.path));
         _analysisResult = null;
         _analysisError = null;
       });
@@ -48,6 +48,16 @@ class _ScannerPageState extends State<ScannerPage> {
     } else {
       print("📷 [ScannerPage] ❌ No se seleccionó ninguna imagen");
     }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _images.removeAt(index);
+      if (_images.isEmpty) {
+        _analysisResult = null;
+        _questionResults = [];
+      }
+    });
   }
 
   Future<void> _analyze() async {
@@ -61,26 +71,49 @@ class _ScannerPageState extends State<ScannerPage> {
     final questions = provider.preguntas;
     
     print("🔍 [ScannerPage] Preguntas cargadas: ${questions.length}");
+    print("🔍 [ScannerPage] Imágenes a analizar: ${_images.length}");
     
     try {
       print("🔍 [ScannerPage] Creando servicio Híbrido (Gemini + OCR)...");
       HybridAnalyzerService service = HybridAnalyzerService();
       
-      print("🔍 [ScannerPage] Llamando a analyzeImage...");
-      var rawResult = await service.analyzeImage(_image!, questions.length);
+      // Analizar todas las imágenes
+      Map<String, dynamic> combinedResult = {
+        'answers': [],
+        'studentName': '',
+      };
       
-      print("🔍 [ScannerPage] ✅ Resultado recibido");
-      print("🔍 [ScannerPage] Resultado: $rawResult");
-      
-      if (rawResult.isEmpty) {
-        print("❌ [ScannerPage] Error: resultado vacío");
-        throw Exception("No se pudo analizar la imagen.");
+      for (int imgIdx = 0; imgIdx < _images.length; imgIdx++) {
+        print("🔍 [ScannerPage] Analizando imagen ${imgIdx + 1} de ${_images.length}...");
+        var rawResult = await service.analyzeImage(_images[imgIdx], questions.length);
+        
+        print("🔍 [ScannerPage] ✅ Resultado recibido de imagen ${imgIdx + 1}");
+        print("🔍 [ScannerPage] Resultado: $rawResult");
+        
+        if (rawResult.isNotEmpty) {
+          // Agregar respuestas
+          if (rawResult['answers'] != null) {
+            combinedResult['answers'].addAll(rawResult['answers']);
+          }
+          
+          // Tomar el nombre de la primera imagen que lo detecte
+          if (rawResult['studentName'] != null && 
+              (rawResult['studentName'] as String).isNotEmpty &&
+              (combinedResult['studentName'] as String).isEmpty) {
+            combinedResult['studentName'] = rawResult['studentName'];
+          }
+        }
       }
       
-      print("🔍 [ScannerPage] Iniciando calificación...");
+      if (combinedResult['answers'].isEmpty) {
+        print("❌ [ScannerPage] Error: no se encontraron respuestas");
+        throw Exception("No se pudieron detectar respuestas en las imágenes.");
+      }
+      
+      print("🔍 [ScannerPage] Iniciando calificación con ${combinedResult['answers'].length} respuestas...");
       // Grading Logic
       double score = 0;
-      List<dynamic> studentAnswers = rawResult['answers'] ?? [];
+      List<dynamic> studentAnswers = combinedResult['answers'] ?? [];
       List<Map<String, dynamic>> questionResults = [];
       
       print("🔍 [ScannerPage] Respuestas del estudiante: ${studentAnswers.length}");
@@ -131,7 +164,7 @@ class _ScannerPageState extends State<ScannerPage> {
       questionResults.sort((a, b) => (a['numero'] as int).compareTo(b['numero'] as int));
       
       // Attempt to match student name
-      String detectedName = rawResult['studentName'] ?? "";
+      String detectedName = combinedResult['studentName'] ?? "";
       print("🔍 [ScannerPage] Nombre detectado: '$detectedName'");
       
       Estudiante? match;
@@ -147,7 +180,7 @@ class _ScannerPageState extends State<ScannerPage> {
       print("🔍 [ScannerPage] ✅ Análisis completado exitosamente");
       setState(() {
         _isAnalyzing = false;
-        _analysisResult = rawResult;
+        _analysisResult = combinedResult;
         _calculatedScore = score;
         _questionResults = questionResults;
         _newStudentNameCtrl.text = detectedName;
@@ -170,37 +203,151 @@ class _ScannerPageState extends State<ScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Escanear Prueba")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+      body: Container(
+        decoration: const BoxDecoration(gradient: kPrimaryGradient),
         child: Column(
           children: [
-            // Image Preview
-            Container(
-              height: 300,
-              width: double.infinity,
-              decoration: BoxDecoration(border: Border.all(color: Colors.grey), color: Colors.grey.shade200),
-              child: _image == null 
-                  ? const Center(child: Icon(Icons.image, size: 50, color: Colors.grey))
-                  : Image.file(_image!, fit: BoxFit.contain),
+            // Header
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, size: 28),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const Text(
+                      "Escanear Prueba",
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: kPrimaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+              ),
             ),
+            
+            const SizedBox(height: 4),
+            
+            // Contenido blanco
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      // Image Previews
+                      if (_images.isEmpty)
+              Container(
+                height: 300,
+                width: double.infinity,
+                decoration: BoxDecoration(border: Border.all(color: Colors.grey), color: Colors.grey.shade200),
+                child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey)),
+              )
+            else
+              SizedBox(
+                height: 150,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _images.length,
+                  itemBuilder: (context, index) {
+                    return Stack(
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          width: 120,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.grey.shade200,
+                          ),
+                          child: Image.file(_images[index], fit: BoxFit.cover),
+                        ),
+                        Positioned(
+                          top: 0,
+                          right: 8,
+                          child: GestureDetector(
+                            onTap: () => _removeImage(index),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              padding: const EdgeInsets.all(4),
+                              child: const Icon(Icons.close, color: Colors.white, size: 16),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 4,
+                          left: 4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              "${index + 1}",
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
             const SizedBox(height: 20),
             
             // Buttons
             if (!_isAnalyzing)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            Column(
               children: [
-                PrimaryButton(
-                  text: "Cámara", 
-                  icon: Icons.camera_alt,
-                  onPressed: () => _pickImage(ImageSource.camera)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => _pickImage(ImageSource.camera),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kPrimaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Icon(Icons.camera_alt, size: 28, color: Colors.white),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => _pickImage(ImageSource.gallery),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kPrimaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Icon(Icons.image, size: 28, color: Colors.white),
+                    ),
+                  ],
                 ),
-                PrimaryButton(
-                  text: "Galería", 
-                  icon: Icons.photo,
-                  onPressed: () => _pickImage(ImageSource.gallery)
-                ),
+                if (_images.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    "${_images.length} foto(s) seleccionada(s)",
+                    style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold),
+                  ),
+                ]
               ],
             ),
 
@@ -211,7 +358,7 @@ class _ScannerPageState extends State<ScannerPage> {
                    children: [
                      const CircularProgressIndicator(),
                      const SizedBox(height: 10),
-                     Text("Analizando prueba con IA...", style: TextStyle(color: Colors.grey.shade600)),
+                     Text("Analizando ${_images.length} foto(s) con IA...", style: TextStyle(color: Colors.grey.shade600)),
                    ],
                  ),
                ),
@@ -464,6 +611,11 @@ class _ScannerPageState extends State<ScannerPage> {
                 onPressed: _saveResult,
               ),
             ]
+          ],
+        ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

@@ -81,12 +81,16 @@ class PdfService {
         children: opts.entries.map((e) {
           return pw.Row(
             children: [
+              // Cuadrado dibujado (8x8 mm) - blanco con borde negro
               pw.Container(
                 width: 8,
                 height: 8,
-                decoration: pw.BoxDecoration(shape: pw.BoxShape.circle, border: pw.Border.all(width: 0.5)),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(width: 1, color: PdfColors.black),
+                  color: PdfColors.white,
+                ),
               ),
-              pw.SizedBox(width: 15), // Aumentado espacio para evitar que OCR una 'O' con la letra (OA, OB)
+              pw.SizedBox(width: 5),
               pw.Text("${e.key}) ${e.value}"),
             ],
           );
@@ -95,7 +99,25 @@ class PdfService {
     } else if (p.tipo == TipoPregunta.verdaderoFalso) {
        return pw.Row(
          children: [
-           pw.Text("V [ ]   F [ ]"),
+           pw.Text("V "),
+           pw.Container(
+             width: 8,
+             height: 8,
+             decoration: pw.BoxDecoration(
+               border: pw.Border.all(width: 1, color: PdfColors.black),
+               color: PdfColors.white,
+             ),
+           ),
+           pw.SizedBox(width: 10),
+           pw.Text("F "),
+           pw.Container(
+             width: 8,
+             height: 8,
+             decoration: pw.BoxDecoration(
+               border: pw.Border.all(width: 1, color: PdfColors.black),
+               color: PdfColors.white,
+             ),
+           ),
          ]
        );
     } else if (p.tipo == TipoPregunta.completar) {

@@ -5,8 +5,7 @@ import 'package:provider/provider.dart';
 import '../logica/providers/app_provider.dart';
 import '../logica/models/app_models.dart';
 import '../logica/database/db_helper.dart';
-import '../AI/hybrid_pdf_analyzer.dart';
-import '../AI/simple_pdf_analyzer.dart';
+import '../AI/pdf_analyzer_service.dart';
 import '../whitgest/ux/widgets.dart';
 
 class BatchPdfScannerPage extends StatefulWidget {
@@ -19,7 +18,6 @@ class BatchPdfScannerPage extends StatefulWidget {
 
 class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
   List<File> _selectedPdfs = [];
-  bool _useSimpleAnalyzer = false; // Nueva opción para análisis sin IA
   bool _isAnalyzing = false;
   String? _analysisError;
   List<Map<String, dynamic>> _batchResults = [];
@@ -57,9 +55,8 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
       return;
     }
 
-    print("🔍 [BatchPdfScanner] Iniciando análisis de lote...");
-    print("🔍 [BatchPdfScanner] PDFs seleccionados: ${_selectedPdfs.length}");
-    print("🔍 [BatchPdfScanner] Modo: ${_useSimpleAnalyzer ? 'Simple' : 'Gemini + OCR'}");
+    print("\n🎯 [BatchPdfScanner] ========== INICIANDO ANÁLISIS DE LOTE ==========");
+    print("🎯 [BatchPdfScanner] PDFs seleccionados: ${_selectedPdfs.length}");
 
     setState(() {
       _isAnalyzing = true;
@@ -69,52 +66,33 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
 
     final provider = Provider.of<AppProvider>(context, listen: false);
     final questions = provider.preguntas;
-    print("🔍 [BatchPdfScanner] Preguntas cargadas: ${questions.length}");
+    print("🎯 [BatchPdfScanner] Preguntas cargadas: ${questions.length}\n");
 
     try {
       List<Map<String, dynamic>> results = [];
+      PdfAnalyzerService pdfAnalyzer = PdfAnalyzerService(); // Nuevo servicio
 
       for (int i = 0; i < _selectedPdfs.length; i++) {
         final pdfFile = _selectedPdfs[i];
         final fileName = pdfFile.path.split('/').last.replaceAll('.pdf', '');
 
-        print("\n📄 [BatchPdfScanner] Procesando PDF ${i + 1}/${_selectedPdfs.length}");
-        print("📄 [BatchPdfScanner] Archivo: $fileName");
-        print("📄 [BatchPdfScanner] Ruta: ${pdfFile.path}");
+        print("\n📄 [BatchPdfScanner] ==========================================");
+        print("📄 [BatchPdfScanner] PDF ${i + 1}/${_selectedPdfs.length}: $fileName");
+        print("📄 [BatchPdfScanner] ==========================================\n");
 
         try {
-          Map<String, dynamic> rawResult;
-          
-          // Elegir método de análisis
-          if (_useSimpleAnalyzer) {
-            print("📋 [BatchPdfScanner] Usando análisis simple...");
-            // Método simple sin IA
-            final simpleService = SimplePdfAnalyzer();
-            rawResult = await simpleService.analyzePdfWithQuestions(
-              pdfFile,
-              questions.map((q) => q.texto).toList(),
-            );
-            print("📋 [BatchPdfScanner] ✅ Análisis simple completado");
-          } else {
-            print("🔵⚫ [BatchPdfScanner] Usando Analizador Híbrido (Gemini + OCR)...");
-            // Método con Analizador Híbrido (Gemini Vision + OCR)
-            final service = HybridPdfAnalyzer();
-            rawResult = await service.analyzePdf(
-              pdfFile.path,
-              questions.length,
-            );
-            print("🔵⚫ [BatchPdfScanner] ✅ Análisis híbrido completado");
-          }
+          // Usar el nuevo servicio especializado en PDFs
+          print("🔍 [BatchPdfScanner] Analizando PDF con PdfAnalyzerService...");
+          var rawResult = await pdfAnalyzer.analyzePdf(pdfFile, questions.length);
 
-          print("📊 [BatchPdfScanner] Resultado obtenido: ${rawResult.keys}");
+          print("\n✅ [BatchPdfScanner] Análisis completado");
           print("📊 [BatchPdfScanner] Nombre: '${rawResult['studentName'] ?? fileName}'");
+          print("📊 [BatchPdfScanner] Respuestas detectadas: ${(rawResult['answers'] as List?)?.length ?? 0}");
 
           // Calificar
           double score = 0;
           List<Map<String, dynamic>> questionResults = [];
           List<dynamic> studentAnswers = rawResult['answers'] ?? [];
-          
-          print("📊 [BatchPdfScanner] Respuestas detectadas: ${studentAnswers.length}");
 
           for (var ans in studentAnswers) {
             int qIndex = (ans['q'] as int) - 1;
@@ -124,7 +102,7 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
               String studentAnswer = val.trim().toUpperCase();
               bool isCorrect = studentAnswer == correctAnswer;
 
-              print("📊 [BatchPdfScanner] P${qIndex + 1}: Estudiante='$studentAnswer' Correcta='$correctAnswer' ${isCorrect ? '✅' : '❌'}");
+              print("📊 [BatchPdfScanner] P${qIndex + 1}: '$studentAnswer' vs '$correctAnswer' ${isCorrect ? '✅' : '❌'}");
 
               if (isCorrect) score += questions[qIndex].valor;
 
@@ -134,6 +112,7 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
                 'respuesta_estudiante': val.trim().isEmpty ? "(No respondida)" : val.trim(),
                 'respuesta_correcta': correctAnswer,
                 'correcta': isCorrect,
+                'valor': questions[qIndex].valor,
               });
             }
           }
@@ -141,20 +120,20 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
           // Rellenar preguntas no respondidas
           for (int j = 0; j < questions.length; j++) {
             if (!questionResults.any((q) => q['numero'] == j + 1)) {
-              print("📊 [BatchPdfScanner] Pregunta ${j + 1} no respondida");
               questionResults.add({
                 'numero': j + 1,
                 'texto': questions[j].texto,
                 'respuesta_estudiante': "(No respondida)",
                 'respuesta_correcta': questions[j].respuestaCorrecta.trim().toUpperCase(),
                 'correcta': false,
+                'valor': questions[j].valor,
               });
             }
           }
 
           questionResults.sort((a, b) => (a['numero'] as int).compareTo(b['numero'] as int));
 
-          print("📊 [BatchPdfScanner] Calificación: $score / ${questions.length}");
+          print("📊 [BatchPdfScanner] Calificación final: $score / ${questions.length} (${(score / questions.length * 100).toStringAsFixed(1)}%)\n");
 
           results.add({
             'studentName': rawResult['studentName'] ?? fileName,
@@ -166,11 +145,10 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
             'correct': questionResults.where((q) => q['correcta'] == true).length,
             'incorrect': questionResults.where((q) => q['correcta'] == false).length,
           });
-          
-          print("✅ [BatchPdfScanner] Resultado agregado para $fileName\n");
+
+          print("✅ [BatchPdfScanner] $fileName guardado en resultados\n");
         } catch (e) {
-          print("❌ [BatchPdfScanner] Error procesando $fileName: $e");
-          print("❌ [BatchPdfScanner] Tipo de error: ${e.runtimeType}");
+          print("❌ [BatchPdfScanner] Error procesando $fileName: $e\n");
           results.add({
             'studentName': fileName,
             'fileName': fileName,
@@ -179,9 +157,13 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
         }
       }
 
-      print("\n🎉 [BatchPdfScanner] Análisis de lote completado");
+      print("\n🎉 [BatchPdfScanner] ========== ANÁLISIS COMPLETADO ==========");
       print("🎉 [BatchPdfScanner] Exitosos: ${results.where((r) => !r.containsKey('error')).length}");
       print("🎉 [BatchPdfScanner] Con error: ${results.where((r) => r.containsKey('error')).length}");
+      print("🎉 [BatchPdfScanner] =========================================\n");
+
+      // Limpiar
+      await pdfAnalyzer.dispose();
 
       setState(() {
         _isAnalyzing = false;
@@ -192,6 +174,7 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
         _isAnalyzing = false;
         _analysisError = "Error al procesar PDFs: $e";
       });
+      print("❌ [BatchPdfScanner] Error fatal: $e\n");
     }
   }
 
@@ -219,47 +202,6 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
 
             const SizedBox(height: 20),
 
-            // Opción de método de análisis
-            if (!_isAnalyzing) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _useSimpleAnalyzer ? "🔍 Análisis Simple" : "🔵⚫ Gemini + OCR",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _useSimpleAnalyzer 
-                              ? "Extrae solo el nombre del archivo"
-                              : "OCR + Detección de marcas (offline)",
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: _useSimpleAnalyzer,
-                      onChanged: (value) {
-                        setState(() => _useSimpleAnalyzer = value);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
             // Botones de selección
             if (!_isAnalyzing) ...[
               ElevatedButton.icon(
@@ -279,7 +221,7 @@ class _BatchPdfScannerPageState extends State<BatchPdfScannerPage> {
               ElevatedButton.icon(
                 onPressed: _analyzePdfs,
                 icon: const Icon(Icons.auto_awesome),
-                label: const Text("Analizar con IA"),
+                label: const Text("Analizar PDFs"),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kPrimaryColor,
                 ),

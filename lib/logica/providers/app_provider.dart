@@ -26,6 +26,11 @@ class AppProvider with ChangeNotifier {
     await DatabaseHelper.instance.createMateria(m);
     await loadMaterias();
   }
+
+  Future<void> updateMateria(Materia m) async {
+    await DatabaseHelper.instance.updateMateria(m);
+    await loadMaterias();
+  }
   
   Future<void> deleteMateria(int id) async {
     await DatabaseHelper.instance.deleteMateria(id);

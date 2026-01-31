@@ -51,3 +51,4 @@ build/
 .packages
 .pub-cache/
 .pub/
+.env

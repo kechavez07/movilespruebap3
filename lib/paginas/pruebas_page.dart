@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../logica/providers/app_provider.dart';
 import '../logica/models/app_models.dart';
 import '../whitgest/ux/widgets.dart';
+import '../whitgest/ux/prueba_card.dart';
 import 'detalle_prueba_page.dart';
 
 class PruebasPage extends StatefulWidget {
@@ -26,45 +27,83 @@ class _PruebasPageState extends State<PruebasPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.materia.nombre)),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddDialog(context),
         child: const Icon(Icons.add),
       ),
-      body: Column(
-        children: [
-           Padding(
-             padding: const EdgeInsets.all(16.0),
-             child: Text("Pruebas de ${widget.materia.nombre}", style: const TextStyle(fontSize: 18, color: Colors.grey)),
-           ),
-           Expanded(
-             child: Consumer<AppProvider>(
+      body: Container(
+        decoration: const BoxDecoration(gradient: kPrimaryGradient),
+        child: Column(
+          children: [
+            // Header
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, size: 28),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Text(
+                      "Pruebas de ${widget.materia.nombre}",
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: kPrimaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Lista de pruebas
+            Expanded(
+              child: Consumer<AppProvider>(
                 builder: (context, provider, child) {
                   if (provider.pruebas.isEmpty) {
-                    return const Center(child: Text("No hay pruebas creadas."));
+                    return const Center(
+                      child: Text("No hay pruebas creadas."),
+                    );
                   }
                   return ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: provider.pruebas.length,
                     itemBuilder: (context, index) {
                       final prueba = provider.pruebas[index];
-                      return CustomCard(
-                        onTap: () {
-                           Navigator.push(context, MaterialPageRoute(builder: (_) => DetallePruebaPage(prueba: prueba, materia: widget.materia)));
-                        },
-                        child: ListTile(
-                          leading: const Icon(Icons.description, color: kPrimaryColor),
-                          title: Text(prueba.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text("Prof: ${prueba.nombreDocente} - ${prueba.fechaCreacion.toString().split(' ')[0]}"),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      final fecha = prueba.fechaCreacion.toString().split(' ')[0];
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: PruebaCard(
+                          nombre: prueba.nombre,
+                          docente: prueba.nombreDocente,
+                          fecha: fecha,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DetallePruebaPage(
+                                  prueba: prueba,
+                                  materia: widget.materia,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       );
                     },
                   );
                 },
               ),
-           ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

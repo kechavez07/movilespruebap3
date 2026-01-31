@@ -1,10 +1,22 @@
 
 import 'package:flutter/material.dart';
 
-// -- Colors --
-const Color kPrimaryColor = Colors.deepPurple;
-const Color kSecondaryColor = Colors.deepPurpleAccent;
+// -- Colors - Gradiente suave --
+const Color kPrimaryColor = Color(0xFF7D3C98); // Púrpura oscuro
+const Color kSecondaryColor = Color(0xFFA569BD); // Púrpura medio
+const Color kAccentColor = Color(0xFF5B7ADB); // Azul
 const Color kBackgroundColor = Color(0xFFF5F5F5);
+
+// -- Gradients --
+const LinearGradient kPrimaryGradient = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0xFFE8DAEF), // Lavanda suave
+    Color(0xFFF0E6FF), // Púrpura muy claro
+    Color(0xFFFFFFFF), // Blanco
+  ],
+);
 
 // -- Text Styles --
 TextStyle kTitleStyle = const TextStyle(

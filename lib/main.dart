@@ -1,11 +1,19 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'logica/providers/app_provider.dart';
 import 'paginas/home_page.dart';
 import 'whitgest/ux/widgets.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+    // Continuar incluso si falta el archivo para permitir usar --dart-define
+    debugPrint('⚠️ .env no cargado: $e');
+  }
   runApp(const MyApp());
 }
 

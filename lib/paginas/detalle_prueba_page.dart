@@ -3,10 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:printing/printing.dart'; // For sharing/previewing PDF
-import 'package:open_file/open_file.dart'; // To open excel
+import 'package:printing/printing.dart';
+import 'package:open_file/open_file.dart';
 
-// Imports for our logic
 import '../logica/providers/app_provider.dart';
 import '../logica/models/app_models.dart';
 import '../logica/services/aiken_parser.dart';
@@ -15,6 +14,9 @@ import '../logica/services/excel_service.dart';
 import '../whitgest/ux/widgets.dart';
 import 'scanner_page.dart';
 import 'batch_pdf_scanner_page.dart';
+import 'preguntas_page.dart';
+import 'resultados_page.dart';
+import 'agregar_pregunta_dialog.dart';
 
 class DetallePruebaPage extends StatefulWidget {
   final Prueba prueba;
@@ -26,13 +28,12 @@ class DetallePruebaPage extends StatefulWidget {
   State<DetallePruebaPage> createState() => _DetallePruebaPageState();
 }
 
-class _DetallePruebaPageState extends State<DetallePruebaPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _DetallePruebaPageState extends State<DetallePruebaPage> {
+  int _selectedTab = 0; // 0: Preguntas, 1: Resultados
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadData();
   }
 
@@ -40,209 +41,564 @@ class _DetallePruebaPageState extends State<DetallePruebaPage> with SingleTicker
     final prov = Provider.of<AppProvider>(context, listen: false);
     prov.loadPreguntas(widget.prueba.id!);
     prov.loadResultados(widget.prueba.id!);
-    prov.loadEstudiantes(); // Ensure we have students for mapping names
+    prov.loadEstudiantes();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.prueba.nombre),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(text: "Preguntas"),
-            Tab(text: "Resultados"),
+      body: Container(
+        decoration: const BoxDecoration(gradient: kPrimaryGradient),
+        child: Column(
+          children: [
+            // Header
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, size: 28),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Text(
+                      widget.prueba.nombre,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: kPrimaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 4),
+            
+            // Botones superiores sin iconos - fondo blanco
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => setState(() => _selectedTab = 0),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: kPrimaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: _selectedTab == 0 ? kPrimaryColor : Colors.grey.shade300,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      child: const Text(
+                        "Preguntas",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => setState(() => _selectedTab = 1),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: kPrimaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: _selectedTab == 1 ? kPrimaryColor : Colors.grey.shade300,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      child: const Text(
+                        "Resultados",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Contenido blanco
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: _selectedTab == 0
+                    ? _buildPreguntasContent()
+                    : _buildResultadosContent(),
+              ),
+            ),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildQuestionsTab(),
-          _buildResultsTab(),
-        ],
-      ),
     );
   }
 
-  // --- Questions Tab ---
-  Widget _buildQuestionsTab() {
-    return Consumer<AppProvider>(
-      builder: (context, provider, child) {
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                   ElevatedButton.icon(
-                     icon: const Icon(Icons.upload_file),
-                     label: const Text("Importar Aiken"),
-                     onPressed: _importAiken,
-                   ),
-                   ElevatedButton.icon(
-                     icon: const Icon(Icons.picture_as_pdf),
-                     label: const Text("PDF"),
-                     onPressed: () => _generatePdf(provider.preguntas),
-                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
+  Widget _buildPreguntasContent() {
+    return Column(
+      children: [
+        // Lista de preguntas
+        Expanded(
+          child: Consumer<AppProvider>(
+            builder: (context, provider, child) {
+              if (provider.preguntas.isEmpty) {
+                return const Center(
+                  child: Text("No hay preguntas. Importa un archivo Aiken."),
+                );
+              }
+              return ListView.builder(
+                padding: const EdgeInsets.all(12),
                 itemCount: provider.preguntas.length,
                 itemBuilder: (context, index) {
                   final p = provider.preguntas[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    child: ListTile(
-                      leading: CircleAvatar(child: Text("${index + 1}")),
-                      title: Text(p.texto),
-                      subtitle: Text("Resp: ${p.respuestaCorrecta}"),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.grey),
-                         onPressed: () {
-                           provider.deletePregunta(p.id!, widget.prueba.id!);
-                         },
-                      ),
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: kPrimaryColor,
+                          foregroundColor: Colors.white,
+                          child: Text("${index + 1}"),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                p.texto,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  "Resp: ${p.respuestaCorrecta}",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.red),
+                          onPressed: () {
+                            provider.deletePregunta(p.id!, widget.prueba.id!);
+                          },
+                        ),
+                      ],
                     ),
                   );
                 },
-              ),
+              );
+            },
+          ),
+        ),
+        
+        // Botones flotantes en la parte inferior
+        Container(
+          padding: const EdgeInsets.all(16.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
             ),
-          ],
-        );
-      },
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.2),
+                blurRadius: 10,
+                offset: const Offset(0, -3),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: kPrimaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(Icons.add, color: kPrimaryColor, size: 20),
+                        label: const Text(
+                          "Nueva",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: kPrimaryColor,
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AgregarPreguntaDialog(
+                                pruebaId: widget.prueba.id!,
+                              ),
+                            ),
+                          ).then((_) {
+                            Provider.of<AppProvider>(context, listen: false)
+                                .loadPreguntas(widget.prueba.id!);
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: kPrimaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(Icons.upload_file, color: kPrimaryColor, size: 20),
+                        label: const Text(
+                          "Aiken",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: kPrimaryColor,
+                          ),
+                        ),
+                        onPressed: () async {
+                          // Implementar importación
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: kPrimaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(Icons.picture_as_pdf, color: kPrimaryColor, size: 20),
+                        label: const Text(
+                          "Genera",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: kPrimaryColor,
+                          ),
+                        ),
+                        onPressed: () {
+                          // Implementar PDF
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  // --- Results Tab ---
-  Widget _buildResultsTab() {
-    return Consumer<AppProvider>(
-      builder: (context, provider, child) {
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                   ElevatedButton.icon(
-                     icon: const Icon(Icons.camera_alt),
-                     label: const Text("Escanear"),
-                     style: ElevatedButton.styleFrom(backgroundColor: kSecondaryColor),
-                     onPressed: () {
-                        if (provider.preguntas.isEmpty) {
-                          showSnackBar(context, "Primero añade preguntas.", isError: true);
-                          return;
-                        }
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => ScannerPage(prueba: widget.prueba)));
-                     },
-                   ),
-                   ElevatedButton.icon(
-                     icon: const Icon(Icons.picture_as_pdf),
-                     label: const Text("PDFs Lote"),
-                     style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
-                     onPressed: () {
-                        if (provider.preguntas.isEmpty) {
-                          showSnackBar(context, "Primero añade preguntas.", isError: true);
-                          return;
-                        }
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => BatchPdfScannerPage(prueba: widget.prueba)));
-                     },
-                   ),
-                   ElevatedButton.icon(
-                     icon: const Icon(Icons.table_view),
-                     label: const Text("Excel"),
-                     onPressed: () => _exportExcel(provider),
-                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
+  Widget _buildResultadosContent() {
+    return Column(
+      children: [
+        // Lista de resultados
+        Expanded(
+          child: Consumer<AppProvider>(
+            builder: (context, provider, child) {
+              if (provider.resultados.isEmpty) {
+                return const Center(
+                  child: Text("No hay resultados aún."),
+                );
+              }
+              return ListView.builder(
+                padding: const EdgeInsets.all(12),
                 itemCount: provider.resultados.length,
                 itemBuilder: (context, index) {
                   final r = provider.resultados[index];
                   final est = provider.estudiantes.firstWhere(
                     (e) => e.id == r.estudianteId,
-                    orElse: () => Estudiante(nombre: "Desconocido", identificacion: "-"),
+                    orElse: () => Estudiante(
+                        nombre: "Desconocido", identificacion: "-"),
                   );
-                  return Card(
-                    color: r.calificacion >= (provider.preguntas.length / 2) ? Colors.green.shade50 : Colors.red.shade50,
-                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    child: ListTile(
-                      title: Text(est.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(r.fechaRealizacion.toString()),
-                      trailing: Text("${r.calificacion.toStringAsFixed(1)} pts", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+
+                  final isPass =
+                      r.calificacion >= (provider.preguntas.length / 2);
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isPass ? Colors.green.shade50 : Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isPass
+                            ? Colors.green.shade200
+                            : Colors.red.shade200,
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor:
+                              isPass ? Colors.green : Colors.red,
+                          foregroundColor: Colors.white,
+                          child: Icon(isPass ? Icons.check : Icons.close),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                est.nombre,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                r.fechaRealizacion.toString().split(' ')[0],
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF95A5A6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isPass
+                                ? Colors.green.shade200
+                                : Colors.red.shade200,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            "${r.calificacion.toStringAsFixed(1)}",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isPass
+                                  ? Colors.green.shade700
+                                  : Colors.red.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
-              ),
+              );
+            },
+          ),
+        ),
+        
+        // Botones flotantes en la parte inferior
+        Container(
+          padding: const EdgeInsets.all(16.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
             ),
-          ],
-        );
-      },
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.2),
+                blurRadius: 10,
+                offset: const Offset(0, -3),
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: kPrimaryGradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    ),
+                    icon: const Icon(Icons.camera_alt, color: kPrimaryColor),
+                    label: const Text(
+                      "Escanear",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: kPrimaryColor,
+                      ),
+                    ),
+                    onPressed: () {
+                      final provider =
+                          Provider.of<AppProvider>(context, listen: false);
+                      if (provider.preguntas.isEmpty) {
+                        showSnackBar(context, "Primero añade preguntas.",
+                            isError: true);
+                        return;
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ScannerPage(prueba: widget.prueba),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: kPrimaryGradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf, color: kPrimaryColor),
+                    label: const Text(
+                      "PDFs Lote",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: kPrimaryColor,
+                      ),
+                    ),
+                    onPressed: () {
+                      final provider =
+                          Provider.of<AppProvider>(context, listen: false);
+                      if (provider.preguntas.isEmpty) {
+                        showSnackBar(context, "Primero añade preguntas.",
+                            isError: true);
+                        return;
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              BatchPdfScannerPage(prueba: widget.prueba),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: kPrimaryGradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    ),
+                    icon: const Icon(Icons.table_view, color: kPrimaryColor),
+                    label: const Text(
+                      "Excel",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: kPrimaryColor,
+                      ),
+                    ),
+                    onPressed: () {},
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
-  }
-
-  // --- Actions ---
-  Future<void> _importAiken() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-       type: FileType.custom, allowedExtensions: ['txt']
-    );
-
-    if (result != null) {
-      File file = File(result.files.single.path!);
-      String content = await file.readAsString();
-      
-      List<Pregunta> imported = AikenParser.parse(content, widget.prueba.id!);
-      
-      if (mounted) {
-        final prov = Provider.of<AppProvider>(context, listen: false);
-        for (var p in imported) {
-          await prov.addPregunta(p);
-        }
-        showSnackBar(context, "${imported.length} preguntas importadas.");
-      }
-    }
-  }
-
-  Future<void> _generatePdf(List<Pregunta> preguntas) async {
-    if (preguntas.isEmpty) {
-      showSnackBar(context, "No hay preguntas para generar PDF.", isError: true);
-      return;
-    }
-    try {
-      String path = await PdfService.generateExamPdf(widget.prueba, widget.materia, preguntas);
-      await Printing.sharePdf(bytes: File(path).readAsBytesSync(), filename: 'Examen.pdf');
-    } catch (e) {
-      showSnackBar(context, "Error generando PDF: $e", isError: true);
-    }
-  }
-
-  Future<void> _exportExcel(AppProvider provider) async {
-    if (provider.resultados.isEmpty) {
-      showSnackBar(context, "No hay resultados para exportar.", isError: true);
-      return;
-    }
-    try {
-      String path = await ExcelService.exportResultados(widget.prueba, widget.materia, provider.estudiantes, provider.resultados);
-      showSnackBar(context, "Exportado a: $path");
-      
-      // Try to open
-      final result = await OpenFile.open(path);
-      if (result.type != ResultType.done) {
-        showSnackBar(context, "No se pudo abrir el archivo: ${result.message}", isError: true);
-      }
-    } catch (e) {
-      showSnackBar(context, "Error exportando: $e", isError: true);
-    }
   }
 }

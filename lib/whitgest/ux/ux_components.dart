@@ -15,6 +15,9 @@ export 'custom_input.dart';
 
 // Tarjetas
 export 'custom_card.dart';
+export 'gradient_option_card.dart';
+export 'materia_card.dart';
+export 'prueba_card.dart';
 
 // Títulos y texto
 export 'custom_title.dart';
